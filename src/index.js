@@ -29,6 +29,7 @@ const routes = {
   '/maps/get': require('./maps').get, // Gets 1 city record from the database
   '/maps/listnames': require('./maps').listnames, // List the names of all city records
   '/maps/key': (req, res) => res.send({key: process.env.KEY}), // API KEY for frontend
+  '/gemini/analyze': require('./gemini').analyzeImage, // Analyze an image
   '/target': require('./maps').add, // Tasks target, query and add a city record
   '/web': (req, res) => res.sendFile(path.join(__dirname, 'index.html'))
 };

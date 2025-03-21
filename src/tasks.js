@@ -38,8 +38,9 @@ async function getLocationNames() {
   return contentItems;
 }
 
+
 /**
- * Creates a Task Queue
+ * Creates a Task Queue with rate limits.
  * @param {string} queueName The Cloud Tasks queue name.
  */
 async function createQueue(queueName) {
@@ -47,13 +48,22 @@ async function createQueue(queueName) {
     parent: client.locationPath(PROJECT, LOCATION),
     queue: {
       name: client.queuePath(PROJECT, LOCATION, queueName),
-      rate_limits: {},
-      retry_config: {},
+      rateLimits: {
+        maxConcurrentDispatches: 100,
+        maxDispatchesPerSecond: 500,
+      },
+      retryConfig: {
+        maxAttempts: 5,
+        maxRetryDuration: '3600s',
+        minBackoff: '0.100s',
+        maxBackoff: '10s',
+      },
     },
   };
   const res = await client.createQueue(request);
   return res;
 }
+
 
 /**
  * Returns `true` if a queue with `queueName` exists.
@@ -81,8 +91,22 @@ async function createTask(placeName) {
   const task = {
     name,
     httpRequest: {
-      httpMethod: 'GET',
-      url: `https://${LOCATION}-${PROJECT}.cloudfunctions.net/tasks-pizza/target?id=${placeName}`,
+      httpMethod: 'GET',      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": `What is the best pizza restaurant in ${placeName}?`
+              }
+            ]
+          }
+        ]
+      }),
+
+      url: `https://${LOCATION}-aiplatform.googleapis.com/v1/${PROJECT}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent`,
     },
   };
 
