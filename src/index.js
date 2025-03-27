@@ -29,7 +29,10 @@ const routes = {
   '/maps/get': require('./maps').get, // Gets 1 city record from the database
   '/maps/listnames': require('./maps').listnames, // List the names of all city records
   '/maps/key': (req, res) => res.send({key: process.env.KEY}), // API KEY for frontend
+  '/gcs/list': require('./gcs').listObjects, // List objects in a GCS bucket
   '/gemini/analyze': require('./gemini').analyzeImage, // Analyze an image
+  '/gemini/get': require('./gemini').get, // Get an image's AI output
+  '/gemini/listnames': require('./gemini').listnames, // List the names of all images'
   '/target': require('./maps').add, // Tasks target, query and add a city record
   '/web': (req, res) => res.sendFile(path.join(__dirname, 'index.html'))
 };

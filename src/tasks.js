@@ -17,7 +17,7 @@ const {v2beta3} = require('@google-cloud/tasks'); // Must be v2beta3 or else tas
 const client = new v2beta3.CloudTasksClient();
 
 // Application configuration
-const PROJECT = process.env.PROJECT || 'serverless-com-demo';
+const PROJECT = process.env.PROJECT || 'vertex-playground-450820';
 const QUEUE = process.env.QUEUE || 'my-queue';
 const LOCATION = process.env.LOCATION || 'us-central1';
 
@@ -28,14 +28,24 @@ const parent = client.queuePath(PROJECT, LOCATION, QUEUE);
  * Gets a list of cities.
  * @returns {string[]} A list of city names.
  */
-async function getLocationNames() {
-  const URL_LOCATIONS = 'https://api.github.com/gists/7100f98e7d3dd48b3c4d7cb85cfd313f'; // 13k locations
-  // const URL_LOCATIONS = 'https://api.github.com/gists/b503eecba3c49198cc0447550cbe3ccb'; // 19 locations
-  const cities = await fetch(URL_LOCATIONS);
-  const json = await cities.json();
-  const content = json.files['cities.txt'].content;
-  const contentItems = content.split('\n');
-  return contentItems;
+async function getFileNames(gcsBucket) {
+  const GET_API_BASE_URL = () => {
+    let URL = 'http://localhost:8080';
+    const isLocalhost = true;
+    const isRun = false;
+    if (!isLocalhost && !isRun) {
+      // include project ID in URL if GCF (e.g. not localhost or Run)
+      // TODO(developer) Change the project ID to your project if deploying to GCF.
+      URL += '/tasks-pizza';
+    }
+    return URL;
+  };
+  const URL_LOCATIONS = `${GET_API_BASE_URL()}/gcs/list?bucket=${gcsBucket}`;
+  const response = await fetch(URL_LOCATIONS, {method: 'GET'});
+  const json = await response.json();
+  if (json.error) throw new Error(json.error);
+  return json;ß
+
 }
 
 
@@ -54,9 +64,9 @@ async function createQueue(queueName) {
       },
       retryConfig: {
         maxAttempts: 5,
-        maxRetryDuration: '3600s',
-        minBackoff: '0.100s',
-        maxBackoff: '10s',
+        maxRetryDuration: {seconds: 3600},
+        minBackoff: {seconds: 0, nanos: 10000000},
+        maxBackoff: {seconds: 100},
       },
     },
   };
@@ -71,10 +81,18 @@ async function createQueue(queueName) {
  * @returns `true` if the queue exists.
  */
 async function queueExists(queueName) {
-  const queue = await client.getQueue({
-    name: client.queuePath(PROJECT, LOCATION, queueName)
-  });
-  return queue.length > 0;
+  const queuePath = client.queuePath(PROJECT, LOCATION, queueName);
+  const request = {
+    parent: client.locationPath(PROJECT, LOCATION),
+  };
+  try {
+    const [response] = await client.listQueues(request);
+    const queueExists = response.some(queue => queue.name === queuePath);
+    return queueExists;
+  } catch (error) {
+    console.error(`Error listing queues:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -83,40 +101,89 @@ async function queueExists(queueName) {
  * @param {string} placeName The name of the city/place to target for our HTTP request.
  * @see https://cloud.google.com/tasks/docs/quotas
  */
-async function createTask(placeName) {
-  const normalizedName = placeName.normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove accents
-      .replace(/[^a-zA-Z]+/g, "-"); // Only keep [a-zA-Z]
-  const name = client.taskPath(PROJECT, LOCATION, QUEUE, normalizedName);
+async function createTask(url) {
+  // const normalizedName = placeName.normalize('NFD')
+  //     .replace(/[\u0300-\u036f]/g, '') // Remove accents
+  //     .replace(/[^a-zA-Z]+/g, "-"); // Only keep [a-zA-Z]
+  // const name = client.taskPath(PROJECT, LOCATION, QUEUE, normalizedName);
+  const GET_API_BASE_URL = () => {
+    let URL = `https://${K_SERVICE}-${K_REVISION}-${PROJECT.replace(/-/g, "")}.a.run.app`;
+  
+    const isLocalhost = true;
+    const isRun = true;
+    if (isLocalhost) { URL = `http://localhost:8080`}
+    if (isLocalhost || isRun) {
+      // include project ID in URL if GCF (e.g. not localhost or Run)
+      // TODO(developer) Change the project ID to your project if deploying to GCF.
+      URL += '/gemini/analyze?url=';
+    }
+    return URL;
+  };
+  const parts = url.split('/');
+  const normalizedName = parts[parts.length-1].normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '') // Remove accents
+  .replace(/[^a-zA-Z]+/g, ""); 
+  const index = `1`;
+  const name = client.taskPath(PROJECT, LOCATION, QUEUE, `${normalizedName}${index}`);
+  const imageParts = [
+    {
+      uri: `${url}`,
+        mimeType: "image/jpeg",
+      
+    },
+  ];
+  // const task = {
+  //   name,
+  //   httpRequest: {
+  //     httpMethod: 'POST',      
+  //     headers: {
+  //       'Content-Type': 'application/json',
+  //     },
+      
+  //     // url: `${GET_API_BASE_URL()}/gemini/analyze?url=${url}`,
+  //     url: `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent`,
+  //   },
+  // };
   const task = {
     name,
     httpRequest: {
-      httpMethod: 'GET',      headers: {
+      httpMethod: 'GET',      
+      headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        "contents": [
+      url: `${GET_API_BASE_URL()}${url}`
+    }
+  }
+  const payload = JSON.stringify({
+    "contents": [
+      {
+        "parts": [
           {
-            "parts": [
-              {
-                "text": `What is the best pizza restaurant in ${placeName}?`
-              }
-            ]
-          }
+            "text": "What is this image about?"
+          },
+           ...imageParts
         ]
-      }),
-
-      url: `https://${LOCATION}-aiplatform.googleapis.com/v1/${PROJECT}/locations/${LOCATION}/publishers/google/models/gemini-2.0-flash-001:generateContent`,
-    },
-  };
+      }
+    ]
+  });
+  task.httpRequest.body = Buffer.from(payload).toString('base64');
+  
 
   // Send create task request.
+  
+  // const task = {
+  //   name,
+  //   httpRequest: {
+  //     httpMethod: 'GET',
+  //     url: `${GET_API_BASE_URL()}/gemini/analyze?url=${url}`,
+  //   },
+  // }
   const request = {parent, task};
   try {
     const [response] = await client.createTask(request);
     console.log(`Created task ${response.name}`);  
   } catch (e) {
-    console.error(`ERROR: ${e.details} (${name})`);
+    console.error(`ERROR: ${e} (${name})`);
   }
 }
 
@@ -125,20 +192,21 @@ async function createTask(placeName) {
  * - Creates Cloud Tasks Queue if needed
  * - Creates N Cloud Tasks
  */
-async function run() {
+async function run(gcs) {
   console.log('Starting...');
 
   console.log('Checking if queue exists...');
   if (!(await queueExists(QUEUE))) {
     console.log(`Creating queue "${QUEUE}"...`);
     await createQueue(QUEUE);
+
   } else {
     console.log(`Queue "${QUEUE}" exists.`);
   }
 
   console.log('Creating Tasks...');
-  const locations = await getLocationNames();
-  for (const loc of locations) {
+  const files = await getFileNames(gcs);
+  for (const loc of files) {
     await createTask(loc);
   }
   console.log('Done.');
@@ -146,10 +214,11 @@ async function run() {
 
 // Export routes for Express app
 module.exports.listnames = async (req, res) => {
-  const locationList = await getLocationNames();
-  res.send(locationList);
+  const fileList = await getFileNames(gcs);
+  res.send(fileList);
 }
 module.exports.start = async (req, res) => {
-  await run();
+  const gcsBucket = req.query.bucket;
+  await run(gcsBucket);
   res.sendStatus(200);
 }

@@ -16,7 +16,8 @@
  * Methods for interacting with the Google Maps API
  * All methods require the environment variable `KEY`.
  */
-const KEY = process.env.KEY;
+const KEY = process.env.KEY || 'AIzaSyCt2TBt_bihSa2_lSwMbxMpDZyaM2GIAHg';
+;
 const maps = require('@google/maps').createClient({
   key: KEY,
   Promise,

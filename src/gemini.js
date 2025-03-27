@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 
-const PROJECT = process.env.PROJECT || 'serverless-com-demo';
+const PROJECT = process.env.PROJECT || 'vertex-playground-450820';
 const LOCATION = process.env.LOCATION || 'us-central1';
 
 
@@ -10,8 +10,8 @@ async function analyzeImage(imageUrl) {
   const imageParts = [
     {
       inlineData: {
-        data: await fileToGenerativePart(imageUrl, "image/png"),
-        mimeType: "image/png",
+        url: imageUrl,
+        mimeType: "image/jpeg",
       },
     },
   ];
@@ -43,10 +43,31 @@ async function analyzeImage(imageUrl) {
   return text;
 }
 
-async function fileToGenerativePart(path, mimeType) {
-  const response = await fetch(path);
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer).toString("base64");
-}
+// async function fileToGenerativePart(path, mimeType) {
+//   const response = await fetch(path);
+//   const arrayBuffer = await response.arrayBuffer();
+//   return Buffer.from(arrayBuffer).toString("base64");
+// }
 
-module.exports.analyzeImage = analyzeImage;
+module.exports.analyzeImage = async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.send({error: 'No ?id='});
+  const summary = await analyzeImage(url);
+  await firestore.storeAiOutput(url, summary);
+  res.send(summary);
+};
+
+
+// Returns a list of map names in the Firestore database.
+module.exports.listnames = async (req, res) => {
+  const images = await firestore.getImages();
+  res.send(images);
+};
+
+
+module.exports.get = async (req, res) => {
+  const imageUrl = req.query.id;
+  if (!imageUrl) return res.send({error: 'No ?url='});
+  const aiOutput = await firestore.getAiOutput(imageUrl);
+  res.send(aiOutput);
+};

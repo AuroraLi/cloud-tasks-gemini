@@ -4,32 +4,52 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Cloud Tasks Pizza Map</title>
+    <title>Cloud Tasks Gemini</title>
     <style>
       /* Set map height explicitly to define the size of the div element that contains the map. */
       #map {
-        height: 100%;
+        height: 80%; /* Reduced map height to make space for input */
+        width: 100%;
       }
       html, body {
         height: 100%;
         margin: 0;
         padding: 0;
       }
+      #input-container {
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 20%;
+      }
+      #location-input {
+        width: 300px;
+        padding: 8px;
+        margin-right: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      #submit-button {
+        padding: 8px 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
+    <div id="input-container">
+      <input type="text" id="gcs-input" placeholder="Enter a gcs bucket">
+      <button id="submit-button">Add Location</button>
+    </div>
+    <div id="gcs-output"></div>
     <div id="map"></div>
     <script>
-      let map; // The GMP map object.
-
-      // Callback from GMP Maps embed script.
-      function initMap() {
-        map = new google.maps.Map(document.getElementById('map'), {
-          zoom: 3, // full screen
-          center: {lat: 0, lng: 0},
-          mapTypeControl: false, // disable satellite view
-        });
-      }
+      
 
       // Wrap function in async IIFE to allow async/await syntax
       (async () => {
@@ -46,14 +66,21 @@
           return URL;
         };
 
-        // Get list of location names
-        (async () => {
-          const URL = `${GET_API_BASE_URL()}/maps/listnames`;
+                // Handle the submit button click
+        const submitButton = document.getElementById('submit-button');
+        const gcsInput = document.getElementById('gcs-input');
+
+        submitButton.addEventListener('click', async () => {
+          const bucket = gcsInput.value;
+          const TASK_URL = `${GET_API_BASE_URL()}/tasks/start?bucket=${bucket}`;
+          const response = await fetch(TASK_URL);
+          
+          const URL = `${GET_API_BASE_URL()}/gcs/list?bucket=${bucket}`;
           const namesFetch = await fetch(URL);
           const names = await namesFetch.json();
           for (const id of names) {
             // Get the map data and add a marker (with that data) to the map.
-            const mapData = await (await fetch(`${GET_API_BASE_URL()}/maps/get?id=${id}`)).json();
+            const mapData = await (await fetch(`${GET_API_BASE_URL()}/gemini/analyze?url=${id}`)).json();
             addMarkerToMap(mapData);
           }
         })();
@@ -115,6 +142,35 @@
         s.setAttribute('src', `https://maps.googleapis.com/maps/api/js?key=${key}&callback=initMap`);
         document.body.appendChild(s);
       })();
+    // </script>
+    // <script>
+
+        // // Handle the submit button click
+        // const submitButton = document.getElementById('submit-button');
+        // const gcsInput = document.getElementById('gcs-input');
+
+        // submitButton.addEventListener('click', async () => {
+        //   const bucket = gcsInput.value;
+        //   if (bucket) {
+        //     try {
+        //       const addUrl = `${GET_API_BASE_URL()}/maps/add?id=${encodeURIComponent(location)}`;
+        //       const response = await fetch(addUrl);
+        //       if (response.ok) {
+        //         const mapData = await response.json();
+        //         addMarkerToMap(mapData);
+        //         locationInput.value = ''; // Clear the input
+        //       } else {
+        //         console.error('Error adding location:', response.statusText);
+        //         alert('Error adding location. Please check the console for details.');
+        //       }
+        //     } catch (error) {
+        //       console.error('Error adding location:', error);
+        //       alert('Error adding location. Please check the console for details.');
+        //     }
+        //   } else {
+        //     alert('Please enter a location.');
+        //   }
+        // });
     </script>
   </body>
 </html>

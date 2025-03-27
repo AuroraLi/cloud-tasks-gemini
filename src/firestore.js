@@ -19,7 +19,7 @@
  * @see https://firebase.google.com/docs/firestore/quickstart
  * @see https://cloud.google.com/firestore/quotas
  */
-const COLLECTION = 'tasks-pizza';
+const COLLECTION = 'tasks-ai';
 
 // Setup Firestore with default credentials
 const admin = require('firebase-admin');
@@ -48,4 +48,24 @@ module.exports.getLocation = async (location) => {
  */
 module.exports.storeLocation = async (location, locationData) => {
   return await db.collection(COLLECTION).doc(location).set(locationData);
+}
+
+
+module.exports.storeAiOutput = async (urlencoded,aiOutput) => {
+  return await db.collection(COLLECTION).doc(urlencoded).set(aiOutput);
+}
+
+
+// Lists all stored images
+module.exports.getLocations = async () => {
+  const docs = await db.collection(COLLECTION).listDocuments();
+  return docs.map(d => d.id);
+}
+
+
+// Get a single ai output
+module.exports.getAiOptput = async (image) => {
+  const doc = await db.collection(COLLECTION).doc(image).get();
+  const data = doc.data();
+  return data || { error: 'No data for this image url found.'};
 }
